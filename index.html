@@ -46,13 +46,26 @@
 </div>
 
     <div id="page-reports" class="page-content hidden">
-        <div class="reports-section">
-            <h2>รายงานยอดขาย</h2>
-            <button id="fetch-sales-btn">ดึงข้อมูลยอดขายล่าสุด</button>
-            <div class="sales-summary">...</div>
-            <table id="sales-table">...</table>
+    <div class="reports-section">
+        <h2>รายงานยอดขาย</h2>
+        <button id="fetch-sales-btn">ดึงข้อมูลยอดขายล่าสุด</button>
+        
+        <div class="sales-summary">
+            <p>ยอดขายรวมทั้งหมด: <span id="total-revenue">0.00</span> บาท</p>
+            <p>จำนวนรายการขาย: <span id="total-transactions">0</span> รายการ</p>
         </div>
+        
+        <table id="sales-table">
+            <thead>
+                <tr>
+                    <th>ID ธุรกรรม</th>
+                    </tr>
+            </thead>
+            <tbody id="sales-tbody">
+                </tbody>
+        </table>
     </div>
+</div>
     
     <script src="script.js"></script>
 </body> 
