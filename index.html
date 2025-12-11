@@ -15,19 +15,35 @@
 <div id="page-reports" class="page-content hidden">...</div>
 
     <div id="page-pos" class="page-content active">
-        <div class="pos-container">
-            <div class="products-section">
-                <h2>รายการสินค้า</h2>
-                <div id="products-list" class="product-grid">...</div>
+    <div class="pos-container">
+        <div class="products-section">
+            <h2>รายการสินค้า</h2>
+            <div id="products-list" class="product-grid">
+                </div>
+        </div>
+
+        <div class="cart-section">
+            <h2>ตะกร้าสินค้า</h2>
+            
+            <div class="table-info">
+                <label for="table-number">หมายเลขโต๊ะ:</label>
+                <input type="text" id="table-number" value="" placeholder="เช่น A5, Takeaway">
+                <label for="customer-name">ชื่อลูกค้า:</label>
+                <input type="text" id="customer-name" placeholder="ชื่อผู้สั่ง (ไม่จำเป็น)">
             </div>
-            <div class="cart-section">
-                <h2>ตะกร้าสินค้า</h2>
-                <div class="table-info">...</div>
-                <ul id="cart-items">...</ul>
-                <div class="cart-summary">...</div>
+            
+            <ul id="cart-items">
+                <li>... รายการสินค้าในตะกร้า ...</li>
+                <li>... จะถูกสร้างโดย JavaScript ...</li>
+            </ul>
+
+            <div class="cart-summary">
+                <p>รวมสุทธิ: <span id="cart-total">0.00</span> บาท</p>
+                <button id="checkout-btn">ยืนยันการขาย</button>
             </div>
         </div>
     </div>
+</div>
 
     <div id="page-reports" class="page-content hidden">
         <div class="reports-section">
@@ -39,5 +55,5 @@
     </div>
     
     <script src="script.js"></script>
-</body>
+</body> 
 </html>

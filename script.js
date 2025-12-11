@@ -9,6 +9,7 @@ const checkoutButton = document.getElementById('checkout-btn');
 let allProducts = []; // เก็บข้อมูลสินค้าทั้งหมดที่ดึงมาจาก Google Sheet
 let cart = {}; // เก็บสถานะตะกร้าสินค้า เช่น {SKU1: {item: {...}, quantity: 2}, SKU2: {...}}
 
+
 // ===================================
 // 1. ฟังก์ชันดึงข้อมูลสินค้าจาก Apps Script (Backend)
 // ===================================
