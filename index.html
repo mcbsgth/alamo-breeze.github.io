@@ -1,72 +1,79 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS System - Google Sheets</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>ระบบจัดการร้าน</h1>
+    <h1>ระบบจัดการร้าน POS (Google Sheets Backend)</h1>
 
     <nav class="main-nav">
-    <button id="nav-pos" class="active">🛒 หน้าขาย (POS)</button>
-    <button id="nav-reports">📊 รายงานยอดขาย</button>
-</nav>
-
-<div id="page-pos" class="page-content active">...</div> 
-<div id="page-reports" class="page-content hidden">...</div>
+        <button id="nav-pos" class="active">🛒 หน้าขาย (POS)</button>
+        <button id="nav-reports">📊 รายงานยอดขาย</button>
+        </nav>
 
     <div id="page-pos" class="page-content active">
-    <div class="pos-container">
-        <div class="products-section">
-            <h2>รายการสินค้า</h2>
-            <div id="products-list" class="product-grid">
+        <div class="pos-container">
+            
+            <div class="products-section">
+                <h2>รายการสินค้า</h2>
+                <div id="products-list" class="product-grid">
+                    <p>กำลังโหลดสินค้า...</p>
                 </div>
-        </div>
-
-        <div class="cart-section">
-            <h2>ตะกร้าสินค้า</h2>
-            
-            <div class="table-info">
-                <label for="table-number">หมายเลขโต๊ะ:</label>
-                <input type="text" id="table-number" value="" placeholder="เช่น A5, Takeaway">
-                <label for="customer-name">ชื่อลูกค้า:</label>
-                <input type="text" id="customer-name" placeholder="ชื่อผู้สั่ง (ไม่จำเป็น)">
             </div>
-            
-            <ul id="cart-items">
-                <li>... รายการสินค้าในตะกร้า ...</li>
-                <li>... จะถูกสร้างโดย JavaScript ...</li>
-            </ul>
 
-            <div class="cart-summary">
-                <p>รวมสุทธิ: <span id="cart-total">0.00</span> บาท</p>
-                <button id="checkout-btn">ยืนยันการขาย</button>
+            <div class="cart-section">
+                <h2>ตะกร้าสินค้า</h2>
+                
+                <div class="table-info">
+                    <label for="table-number">หมายเลขโต๊ะ:</label>
+                    <input type="text" id="table-number" value="" placeholder="เช่น A5, Takeaway">
+                    <label for="customer-name">ชื่อลูกค้า:</label>
+                    <input type="text" id="customer-name" placeholder="ชื่อผู้สั่ง (ไม่จำเป็น)">
+                </div>
+                
+                <ul id="cart-items">
+                    <li>ไม่มีสินค้าในตะกร้า</li>
+                </ul>
+
+                <div class="cart-summary">
+                    <p>รวมสุทธิ: <span id="cart-total">0.00</span> บาท</p>
+                    <button id="checkout-btn" disabled>ยืนยันการขาย</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
     <div id="page-reports" class="page-content hidden">
-    <div class="reports-section">
-        <h2>รายงานยอดขาย</h2>
-        <button id="fetch-sales-btn">ดึงข้อมูลยอดขายล่าสุด</button>
-        
-        <div class="sales-summary">
-            <p>ยอดขายรวมทั้งหมด: <span id="total-revenue">0.00</span> บาท</p>
-            <p>จำนวนรายการขาย: <span id="total-transactions">0</span> รายการ</p>
-        </div>
-        
-        <table id="sales-table">
-            <thead>
-                <tr>
-                    <th>ID ธุรกรรม</th>
+        <div class="reports-section">
+            <h2>รายงานยอดขาย</h2>
+            <button id="fetch-sales-btn">ดึงข้อมูลยอดขายล่าสุด</button>
+            
+            <div class="sales-summary">
+                <p>ยอดขายรวมทั้งหมด: <span id="total-revenue">0.00</span> บาท</p>
+                <p>จำนวนรายการขาย: <span id="total-transactions">0</span> รายการ</p>
+            </div>
+            
+            <table id="sales-table">
+                <thead>
+                    <tr>
+                        <th>ID ธุรกรรม</th>
+                        <th>วันที่/เวลา</th>
+                        <th>โต๊ะ</th>
+                        <th>ลูกค้า</th>
+                        <th>ยอดรวมสุทธิ</th>
+                        <th>รายการสินค้า</th>
                     </tr>
-            </thead>
-            <tbody id="sales-tbody">
+                </thead>
+                <tbody id="sales-tbody">
+                    <tr><td colspan="6">ยังไม่มีข้อมูลรายงาน</td></tr>
                 </tbody>
-        </table>
+            </table>
+        </div>
     </div>
-</div>
     
-    <script src="script.js"></script>
-</body> 
+    <script src="script.js"></script> 
+</body>
 </html>
