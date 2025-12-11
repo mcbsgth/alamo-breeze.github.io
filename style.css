@@ -237,3 +237,40 @@ h2 {
 #sales-table tr:nth-child(even) {
     background-color: #f9f9f9;
 }
+/* =================================================================== */
+/* 6. Product Management Form Styles */
+/* =================================================================== */
+.product-mgmt-section {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.form-group {
+    margin-bottom: 15px;
+}
+.form-group label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+.form-group input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+#save-product-btn {
+    width: 100%;
+    padding: 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.2s;
+}
+#save-product-btn:hover {
+    background-color: #0056b3;
+}

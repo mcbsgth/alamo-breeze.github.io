@@ -10,9 +10,10 @@
     <h1>ระบบจัดการร้าน POS (Google Sheets Backend)</h1>
 
     <nav class="main-nav">
-        <button id="nav-pos" class="active">🛒 หน้าขาย (POS)</button>
-        <button id="nav-reports">📊 รายงานยอดขาย</button>
-        </nav>
+    <button id="nav-pos" class="active">🛒 หน้าขาย (POS)</button>
+    <button id="nav-reports">📊 รายงานยอดขาย</button>
+    <button id="nav-product-mgmt">📦 จัดการสินค้า</button> 
+</nav>
 
     <div id="page-pos" class="page-content active">
         <div class="pos-container">
@@ -73,6 +74,42 @@
             </table>
         </div>
     </div>
+    <div id="page-product-mgmt" class="page-content hidden">
+    <div class="product-mgmt-section">
+        <h2>📦 เพิ่มรายการอาหารใหม่</h2>
+        <form id="add-product-form">
+            <div class="form-group">
+                <label for="sku">รหัสสินค้า (SKU):</label>
+                <input type="text" id="sku" required>
+            </div>
+            <div class="form-group">
+                <label for="name">ชื่อสินค้า/อาหาร:</label>
+                <input type="text" id="name" required>
+            </div>
+            <div class="form-group">
+                <label for="price">ราคาขาย:</label>
+                <input type="number" id="price" min="0" required>
+            </div>
+            <div class="form-group">
+                <label for="image-link">ลิงก์รูปภาพ (URL):</label>
+                <input type="url" id="image-link" placeholder="เช่น https://example.com/image.jpg">
+            </div>
+            <div class="form-group">
+                <label for="category">หมวดหมู่:</label>
+                <input type="text" id="category" placeholder="เช่น อาหาร, เครื่องดื่ม">
+            </div>
+            <div class="form-group">
+                <label for="stock">จำนวนคงเหลือเริ่มต้น:</label>
+                <input type="number" id="stock" min="0" value="1" required>
+            </div>
+            <button type="submit" id="save-product-btn">บันทึกรายการสินค้า</button>
+            <p id="product-status-message" style="margin-top: 10px;"></p>
+        </form>
+        
+        <hr style="margin: 30px 0;">
+        <h2>รายการสินค้าปัจจุบัน</h2>
+        </div>
+</div>
     
     <script src="script.js"></script> 
 </body>
