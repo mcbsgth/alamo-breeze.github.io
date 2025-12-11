@@ -315,8 +315,10 @@ async function handleAddProduct(event) {
     };
 
     // 2. สร้าง Payload
-    const requestBody = { action: 'addProduct', payload: productData };
-
+    const requestBody = {
+    action: 'addProduct', // *** ต้องสะกดตรงกับใน doPost(e) ของ Code.gs ***
+    payload: productData
+    };
     try {
         const response = await fetch(GAS_WEB_APP_URL, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
