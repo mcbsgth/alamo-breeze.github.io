@@ -3,7 +3,7 @@
 // ===================================================================
 
 // *** สำคัญ! เปลี่ยน URL นี้ด้วย Deployment URL ของ Google Apps Script ของคุณ ***
-const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxp6eX3t57lLBJYgJKgsjKlTkIkD-3xqrlaWVDL4gIFPNQAX4jsOCYUqYOQSkq9O7Y/exec"; 
+const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzhwR07RD1PmAKk7pQubmoPbHw5dztPDattgOmlOZXB22AikpKu6JA-CtjNjUXopzJM/exec"; 
 
 let allProducts = []; // เก็บข้อมูลสินค้าทั้งหมดที่ดึงมาจาก Google Sheet
 let cart = {}; // เก็บสถานะตะกร้าสินค้า 
