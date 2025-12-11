@@ -10,7 +10,33 @@ body { font-family: sans-serif; margin: 20px; }
 #checkout-btn { width: 100%; padding: 10px; background-color: #4CAF50; color: white; border: none; cursor: pointer; margin-top: 10px; }
 .table-info { margin-bottom: 15px; padding: 10px; border: 1px solid #e0e0e0; border-radius: 5px; }
 .table-info input { width: 90%; margin-bottom: 5px; padding: 5px; border: 1px solid #ccc; }
-/* ... (CSS เดิม) ... */
+/* -------------------------------------- */
+/* ส่วนหลักของหน้าจอ POS */
+/* -------------------------------------- */
+.pos-container { 
+    display: flex; /* ใช้ Flexbox เพื่อจัดองค์ประกอบในแนวนอน */
+    gap: 20px;     /* กำหนดระยะห่างระหว่างส่วน */
+    min-height: 500px; /* ทำให้มีพื้นที่เพียงพอ */
+}
+
+.products-section { 
+    flex: 2; /* ส่วนรายการสินค้าใช้พื้นที่ 2 ส่วน */
+    padding-right: 20px; 
+    border-right: 1px solid #eee; /* เส้นแบ่งเบาๆ */
+}
+
+.cart-section { 
+    flex: 1; /* ส่วนตะกร้าใช้พื้นที่ 1 ส่วน */
+}
+
+/* สำหรับจัดรูปแบบสินค้าให้เป็น Grid (ตะแกรง) */
+.product-grid { 
+    display: grid; 
+    /* แสดงคอลัมน์ตามความกว้างที่เหมาะสม */
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); 
+    gap: 10px; 
+}
+/* ... (โค้ด CSS เดิมอื่นๆ เช่น .product-card, .main-nav) ... */
 
 /* NEW: สำหรับจัดการหน้าจอ */
 .page-content.hidden {
