@@ -93,7 +93,6 @@ function updateCartDisplay() {
 // ===================================
 // 4. การทำงานเมื่อโหลดหน้าเว็บ
 // ===================================
-fetchProducts();
 // (โค้ดเดิมด้านบน: GAS_WEB_APP_URL, DOM elements, cart object, fetchProducts, renderProducts, updateCartDisplay)
 
 // ===================================
@@ -234,7 +233,7 @@ const pageReportsDiv = document.getElementById('page-reports');
 
 function switchPage(targetPageId, clickedButton) {
     // 1. ซ่อนทุกหน้า: ต้องแน่ใจว่า class 'page-content' ถูกใช้ใน HTML
-    document.querySelectorAll('.page-content').forEach(page => {
+    document.querySelectorAll('page-reports').forEach(page => {
         page.classList.add('hidden');
         page.classList.remove('active');
     });
@@ -247,7 +246,7 @@ function switchPage(targetPageId, clickedButton) {
     }
 
     // 3. จัดการสถานะปุ่ม: ต้องแน่ใจว่าใช้ class 'main-nav button'
-    document.querySelectorAll('.main-nav button').forEach(btn => {
+    document.querySelectorAll('page-pos').forEach(btn => {
         btn.classList.remove('active');
     });
     if (clickedButton) { // เพิ่มการตรวจสอบ null
@@ -268,5 +267,6 @@ navReportsBtn.addEventListener('click', () => {
     switchPage('page-reports', navReportsBtn);
 });
 
+fetchProducts();
 // ** NOTE: คุณต้องย้ายโค้ด fetchAndRenderSales() และ renderSalesTable() 
 // จากขั้นตอนที่ 6 เข้ามาในไฟล์ script.js นี้ด้วย **
