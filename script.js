@@ -302,17 +302,6 @@ async function handleAddProduct(event) {
     button.disabled = true;
     productStatusMessage.textContent = 'กำลังบันทึก...';
     productStatusMessage.style.color = 'blue';
-
-const result = await response.json();
-        
-if (result.status === 'success') {
-    // ... ล้างฟอร์ม
-} else {
-    // ** ตรวจสอบว่ามี Error Message ใน Console หรือไม่ **
-    productStatusMessage.textContent = `❌ เกิดข้อผิดพลาด: ${result.message}`;
-    productStatusMessage.style.color = 'red';
-}
-// ...
     
     // 1. รวบรวมข้อมูลจากฟอร์ม
     const productData = {
