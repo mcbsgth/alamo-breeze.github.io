@@ -1,116 +1,1071 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POS System - Google Sheets</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <h1>ระบบจัดการร้าน POS (Google Sheets Backend)</h1>
+<!doctype html>
+<html lang="th" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Point of Sale</title>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+ </head>
+ <body class="h-full">
+  <div id="app" class="h-full w-full overflow-auto"></div>
+  <script>
+    const defaultConfig = {
+      background_color: "#f8f9fa",
+      surface_color: "#ffffff",
+      text_color: "#1a1a1a",
+      primary_action_color: "#28a745",
+      secondary_action_color: "#6c757d",
+      font_family: "sans-serif",
+      font_size: 16,
+      restaurant_name: "ร้านอาหารของเรา",
+      add_to_order_text: "เพิ่ม",
+      checkout_button_text: "ชำระเงิน",
+      clear_button_text: "ล้างรายการ"
+    };
 
-    <nav class="main-nav">
-    <button id="nav-pos" class="active">🛒 หน้าขาย (POS)</button>
-    <button id="nav-reports">📊 รายงานยอดขาย</button>
-    <button id="nav-product-mgmt">📦 จัดการสินค้า</button> 
-</nav>
+    let currentOrders = [];
+    let allMenuItems = [];
+    let allMembers = [];
+    let selectedCategory = 'all';
+    let currentView = 'pos';
+    let selectedMember = null;
+    let checkInDiscount = false;
 
-    <div id="page-pos" class="page-content active">
-        <div class="pos-container">
-            
-            <div class="products-section">
-                <h2>รายการสินค้า</h2>
-                <div id="products-list" class="product-grid">
-                    <p>กำลังโหลดสินค้า...</p>
+    const MEMBER_TIERS = {
+      'member': {
+        'Silver': { visits: 0, discount: 5 },
+        'Gold': { visits: 10, discount: 7 },
+        'Platinum': { visits: 20, discount: 10 }
+      },
+      'black': {
+        'Silver': { visits: 0, discount: 10 },
+        'Gold': { visits: 10, discount: 12 },
+        'Platinum': { visits: 20, discount: 15 }
+      }
+    };
+
+    function getMemberTier(cardType, visitCount) {
+      const tiers = MEMBER_TIERS[cardType];
+      if (visitCount >= 20) return 'Platinum';
+      if (visitCount >= 10) return 'Gold';
+      return 'Silver';
+    }
+
+    function getMemberDiscount(cardType, tier) {
+      return MEMBER_TIERS[cardType][tier].discount;
+    }
+
+    function getDefaultIcon(category) {
+      const icons = {
+        'อาหารจานหลัก': '<svg viewBox="0 0 64 64" class="w-full h-full"><rect x="20" y="15" width="24" height="28" rx="2" fill="#f5f5dc" stroke="#d4af37" stroke-width="2"/><ellipse cx="32" cy="18" rx="10" ry="4" fill="#ffffff"/></svg>',
+        'เครื่องดื่ม': '<svg viewBox="0 0 64 64" class="w-full h-full"><path d="M20 15 L22 45 L42 45 L44 15 Z" fill="#ffa500" opacity="0.8"/><ellipse cx="32" cy="15" rx="12" ry="4" fill="#ff8c00"/></svg>',
+        'ของหวาน': '<svg viewBox="0 0 64 64" class="w-full h-full"><rect x="18" y="30" width="28" height="15" fill="#ffb6c1"/><rect x="20" y="35" width="24" height="3" fill="#fff"/></svg>'
+      };
+      return icons[category] || '<svg viewBox="0 0 64 64" class="w-full h-full"><circle cx="32" cy="32" r="20" fill="#ddd"/></svg>';
+    }
+
+    function getTierColor(tier) {
+      const colors = {
+        'Silver': '#C0C0C0',
+        'Gold': '#FFD700',
+        'Platinum': '#E5E4E2'
+      };
+      return colors[tier] || '#999';
+    }
+
+    function getTierBadge(tier) {
+      return `<svg viewBox="0 0 24 24" class="w-6 h-6" style="display: inline-block; vertical-align: middle;">
+        <path d="M12 2 L15 8 L22 9 L17 14 L18 21 L12 18 L6 21 L7 14 L2 9 L9 8 Z" fill="${getTierColor(tier)}" stroke="#333" stroke-width="1"/>
+      </svg>`;
+    }
+
+    async function renderApp(config) {
+      const app = document.getElementById('app');
+      const customFont = config.font_family || defaultConfig.font_family;
+      const baseFontStack = 'Arial, sans-serif';
+      const baseSize = config.font_size || defaultConfig.font_size;
+
+      app.style.fontFamily = `${customFont}, ${baseFontStack}`;
+      app.style.backgroundColor = config.background_color || defaultConfig.background_color;
+
+      if (currentView === 'manage') {
+        renderManageView(config, baseSize);
+      } else if (currentView === 'member') {
+        renderMemberView(config, baseSize);
+      } else {
+        renderPOSView(config, baseSize);
+      }
+    }
+
+    function renderPOSView(config, baseSize) {
+      const app = document.getElementById('app');
+      const categories = [...new Set(allMenuItems.map(item => item.category))];
+      
+      app.innerHTML = `
+        <div class="flex h-full">
+          <!-- Menu Section -->
+          <div class="flex-1 overflow-auto p-6">
+            <header class="mb-6">
+              <div class="flex justify-between items-center mb-2">
+                <h1 id="restaurant-title" class="font-bold" style="font-size: ${baseSize * 2}px; color: ${config.text_color || defaultConfig.text_color};">
+                  ${config.restaurant_name || defaultConfig.restaurant_name}
+                </h1>
+                <div class="flex gap-2">
+                  <button id="member-page-btn" class="px-4 py-2 rounded-lg font-semibold transition-all" style="font-size: ${baseSize * 0.9}px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white;">
+                    สมาชิก
+                  </button>
+                  <button id="manage-menu-btn" class="px-4 py-2 rounded-lg font-semibold transition-all" style="font-size: ${baseSize * 0.9}px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white;">
+                    จัดการเมนู
+                  </button>
                 </div>
+              </div>
+              <p style="font-size: ${baseSize * 0.9}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7;">เลือกรายการอาหารเพื่อเพิ่มในออเดอร์</p>
+            </header>
+
+            <!-- Category Filter Buttons -->
+            <div class="flex gap-2 mb-6 flex-wrap" id="category-buttons">
+              <button class="category-btn px-4 py-2 rounded-lg font-semibold transition-all" data-category="all" style="font-size: ${baseSize * 0.9}px;">
+                ทั้งหมด
+              </button>
             </div>
 
-            <div class="cart-section">
-                <h2>ตะกร้าสินค้า</h2>
+            <div id="menu-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+          </div>
+
+          <!-- Order Summary Section -->
+          <div class="w-96 border-l overflow-auto" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border-color: rgba(0,0,0,0.1);">
+            <div class="p-6 border-b" style="border-color: rgba(0,0,0,0.1);">
+              <h2 class="font-bold mb-4" style="font-size: ${baseSize * 1.5}px; color: ${config.text_color || defaultConfig.text_color};">รายการสั่งซื้อ</h2>
+              
+              <!-- Table Number Input -->
+              <div class="mb-4">
+                <label for="table-number" class="block mb-2 font-semibold" style="font-size: ${baseSize * 0.9}px; color: ${config.text_color || defaultConfig.text_color};">เลขโต๊ะ</label>
+                <input type="text" id="table-number" placeholder="ใส่เลขโต๊ะ" class="w-full px-3 py-2 rounded-lg border" style="font-size: ${baseSize * 0.9}px; border-color: rgba(0,0,0,0.2);">
+              </div>
+              
+              <!-- Member & Discount Section -->
+              <div id="member-discount-section" class="mb-4 p-3 rounded-lg" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                <div class="mb-3">
+                  <label class="block mb-2 font-semibold" style="font-size: ${baseSize * 0.85}px; color: ${config.text_color || defaultConfig.text_color};">เลือกสมาชิก</label>
+                  <select id="member-select" class="w-full px-3 py-2 rounded-lg border" style="font-size: ${baseSize * 0.85}px; border-color: rgba(0,0,0,0.2);">
+                    <option value="">-- ไม่ใช้สมาชิก --</option>
+                  </select>
+                </div>
                 
-                <div class="table-info">
-                    <label for="table-number">หมายเลขโต๊ะ:</label>
-                    <input type="text" id="table-number" value="" placeholder="เช่น A5, Takeaway">
-                    <label for="customer-name">ชื่อลูกค้า:</label>
-                    <input type="text" id="customer-name" placeholder="ชื่อผู้สั่ง (ไม่จำเป็น)">
+                <div id="selected-member-info" class="mb-3" style="display: none;">
                 </div>
                 
-                <ul id="cart-items">
-                    <li>ไม่มีสินค้าในตะกร้า</li>
-                </ul>
-
-                <div class="cart-summary">
-                    <p>รวมสุทธิ: <span id="cart-total">0.00</span> บาท</p>
-                    <button id="checkout-btn" disabled>ยืนยันการขาย</button>
+                <div class="flex items-center gap-2">
+                  <input type="checkbox" id="checkin-checkbox" class="w-4 h-4">
+                  <label for="checkin-checkbox" style="font-size: ${baseSize * 0.85}px; color: ${config.text_color || defaultConfig.text_color};">
+                    เช็คอินร้าน (ลด 5%)
+                  </label>
                 </div>
+              </div>
             </div>
-        </div>
-    </div>
+            
+            <div id="order-items" class="p-6 flex-1 overflow-auto" style="min-height: 300px;">
+              <p style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.5; text-align: center; margin-top: 80px;">
+                ยังไม่มีรายการ
+              </p>
+            </div>
 
-    <div id="page-reports" class="page-content hidden">
-        <div class="reports-section">
-            <h2>รายงานยอดขาย</h2>
-            <button id="fetch-sales-btn">ดึงข้อมูลยอดขายล่าสุด</button>
-            
-            <div class="sales-summary">
-                <p>ยอดขายรวมทั้งหมด: <span id="total-revenue">0.00</span> บาท</p>
-                <p>จำนวนรายการขาย: <span id="total-transactions">0</span> รายการ</p>
+            <div class="p-6 border-t" style="border-color: rgba(0,0,0,0.1);">
+              <div id="discount-summary" class="mb-3" style="display: none;">
+              </div>
+              
+              <div class="flex justify-between mb-4">
+                <span class="font-bold" style="font-size: ${baseSize * 1.2}px; color: ${config.text_color || defaultConfig.text_color};">ยอดรวม</span>
+                <span id="total-amount" class="font-bold" style="font-size: ${baseSize * 1.2}px; color: ${config.text_color || defaultConfig.text_color};">฿0</span>
+              </div>
+              
+              <button id="checkout-btn" class="w-full py-3 px-4 rounded-lg font-semibold mb-3 transition-all" style="font-size: ${baseSize}px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white;">
+                ${config.checkout_button_text || defaultConfig.checkout_button_text}
+              </button>
+              
+              <button id="clear-btn" class="w-full py-2 px-4 rounded-lg font-semibold transition-all" style="font-size: ${baseSize * 0.9}px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white;">
+                ${config.clear_button_text || defaultConfig.clear_button_text}
+              </button>
             </div>
-            
-            <table id="sales-table">
-                <thead>
-                    <tr>
-                        <th>ID ธุรกรรม</th>
-                        <th>วันที่/เวลา</th>
-                        <th>โต๊ะ</th>
-                        <th>ลูกค้า</th>
-                        <th>ยอดรวมสุทธิ</th>
-                        <th>รายการสินค้า</th>
-                    </tr>
-                </thead>
-                <tbody id="sales-tbody">
-                    <tr><td colspan="6">ยังไม่มีข้อมูลรายงาน</td></tr>
-                </tbody>
-            </table>
+          </div>
         </div>
-    </div>
-    <div id="page-product-mgmt" class="page-content hidden">
-    <div class="product-mgmt-section">
-        <h2>📦 เพิ่มรายการอาหารใหม่</h2>
-        <form id="add-product-form">
-            <div class="form-group">
-                <label for="sku">รหัสสินค้า (SKU):</label>
-                <input type="text" id="sku" required>
-            </div>
-            <div class="form-group">
-                <label for="name">ชื่อสินค้า/อาหาร:</label>
-                <input type="text" id="name" required>
-            </div>
-            <div class="form-group">
-                <label for="price">ราคาขาย:</label>
-                <input type="number" id="price" min="0" required>
-            </div>
-            <div class="form-group">
-                <label for="image-link">ลิงก์รูปภาพ (URL):</label>
-                <input type="url" id="image-link" placeholder="เช่น https://example.com/image.jpg">
-            </div>
-            <div class="form-group">
-                <label for="category">หมวดหมู่:</label>
-                <input type="text" id="category" placeholder="เช่น อาหาร, เครื่องดื่ม">
-            </div>
-            <div class="form-group">
-                <label for="stock">จำนวนคงเหลือเริ่มต้น:</label>
-                <input type="number" id="stock" min="0" value="1" required>
-            </div>
-            <button type="submit" id="save-product-btn">บันทึกรายการสินค้า</button>
-            <p id="product-status-message" style="margin-top: 10px;"></p>
-        </form>
+      `;
+
+      // Populate member select
+      const memberSelect = document.getElementById('member-select');
+      allMembers.forEach(member => {
+        const option = document.createElement('option');
+        option.value = member.member_id;
+        option.textContent = `${member.member_name} (${member.member_phone})`;
+        memberSelect.appendChild(option);
+      });
+
+      memberSelect.addEventListener('change', (e) => {
+        if (e.target.value) {
+          selectedMember = allMembers.find(m => m.member_id === e.target.value);
+        } else {
+          selectedMember = null;
+        }
+        updateMemberInfo(config, baseSize);
+        updateOrderDisplay(config, baseSize);
+      });
+
+      document.getElementById('checkin-checkbox').addEventListener('change', (e) => {
+        checkInDiscount = e.target.checked;
+        updateOrderDisplay(config, baseSize);
+      });
+
+      // Render category buttons
+      const categoryButtonsContainer = document.getElementById('category-buttons');
+      categories.forEach(category => {
+        const btn = document.createElement('button');
+        btn.className = 'category-btn px-4 py-2 rounded-lg font-semibold transition-all';
+        btn.dataset.category = category;
+        btn.style.fontSize = `${baseSize * 0.9}px`;
+        btn.textContent = category;
+        categoryButtonsContainer.appendChild(btn);
+      });
+
+      updateCategoryButtons(config);
+      renderMenuItems(config, baseSize);
+      updateOrderDisplay(config, baseSize);
+
+      // Event listeners
+      document.querySelectorAll('.category-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          selectedCategory = e.target.dataset.category;
+          updateCategoryButtons(config);
+          renderMenuItems(config, baseSize);
+        });
+      });
+
+      document.getElementById('member-page-btn').addEventListener('click', () => {
+        currentView = 'member';
+        renderApp(config);
+      });
+
+      document.getElementById('manage-menu-btn').addEventListener('click', () => {
+        currentView = 'manage';
+        renderApp(config);
+      });
+
+      document.getElementById('checkout-btn').addEventListener('click', () => checkout(config, baseSize));
+      document.getElementById('clear-btn').addEventListener('click', () => clearOrder(config, baseSize));
+    }
+
+    function updateMemberInfo(config, baseSize) {
+      const infoDiv = document.getElementById('selected-member-info');
+      
+      if (!selectedMember) {
+        infoDiv.style.display = 'none';
+        return;
+      }
+
+      const tier = getMemberTier(selectedMember.member_card_type, selectedMember.visit_count);
+      const discount = getMemberDiscount(selectedMember.member_card_type, tier);
+      const cardTypeName = selectedMember.member_card_type === 'member' ? 'Member Card' : 'Black Card';
+      
+      infoDiv.style.display = 'block';
+      infoDiv.innerHTML = `
+        <div class="p-3 rounded-lg" style="background-color: ${config.surface_color || defaultConfig.surface_color}; border: 2px solid ${getTierColor(tier)};">
+          <div class="flex items-center justify-between mb-2">
+            <span style="font-size: ${baseSize * 0.9}px; font-weight: 600; color: ${config.text_color || defaultConfig.text_color};">
+              ${selectedMember.member_name}
+            </span>
+            ${getTierBadge(tier)}
+          </div>
+          <div style="font-size: ${baseSize * 0.8}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.8;">
+            ${cardTypeName} - ${tier}<br>
+            มาทาน: ${selectedMember.visit_count} ครั้ง<br>
+            ส่วนลด: ${discount}%
+          </div>
+        </div>
+      `;
+    }
+
+    function renderMemberView(config, baseSize) {
+      const app = document.getElementById('app');
+      
+      app.innerHTML = `
+        <div class="h-full overflow-auto p-6">
+          <header class="mb-6 flex justify-between items-center">
+            <h1 class="font-bold" style="font-size: ${baseSize * 2}px; color: ${config.text_color || defaultConfig.text_color};">
+              จัดการสมาชิก
+            </h1>
+            <button id="back-to-pos-from-member-btn" class="px-4 py-2 rounded-lg font-semibold transition-all" style="font-size: ${baseSize * 0.9}px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white;">
+              ← กลับไปขาย
+            </button>
+          </header>
+
+          <!-- Add Member Form -->
+          <div class="max-w-2xl mb-8 p-6 rounded-lg" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+            <h2 class="font-bold mb-4" style="font-size: ${baseSize * 1.3}px; color: ${config.text_color || defaultConfig.text_color};">สมัครสมาชิกใหม่</h2>
+            <form id="add-member-form">
+              <div class="mb-4">
+                <label class="block mb-2 font-semibold" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">ชื่อสมาชิก</label>
+                <input type="text" id="member-name" required class="w-full px-4 py-2 rounded-lg border" style="font-size: ${baseSize}px; border-color: rgba(0,0,0,0.2);">
+              </div>
+              
+              <div class="mb-4">
+                <label class="block mb-2 font-semibold" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">เบอร์โทรศัพท์</label>
+                <input type="tel" id="member-phone" required class="w-full px-4 py-2 rounded-lg border" style="font-size: ${baseSize}px; border-color: rgba(0,0,0,0.2);" placeholder="0812345678">
+              </div>
+              
+              <div class="mb-4">
+                <label class="block mb-2 font-semibold" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">ประเภทบัตร</label>
+                <select id="member-card-type" required class="w-full px-4 py-2 rounded-lg border" style="font-size: ${baseSize}px; border-color: rgba(0,0,0,0.2);">
+                  <option value="member">The JEMs Member Card</option>
+                  <option value="black">The JEMs Black Card</option>
+                </select>
+              </div>
+              
+              <div class="mb-4 p-4 rounded-lg" style="background-color: ${config.background_color || defaultConfig.background_color};">
+                <h3 class="font-semibold mb-2" style="font-size: ${baseSize * 0.9}px; color: ${config.text_color || defaultConfig.text_color};">ระดับสมาชิก:</h3>
+                <div id="card-type-info" style="font-size: ${baseSize * 0.85}px; color: ${config.text_color || defaultConfig.text_color};">
+                  <p class="mb-1"><strong>Member Card:</strong></p>
+                  <p class="ml-4">• Silver (เริ่มต้น) - ลด 5%</p>
+                  <p class="ml-4">• Gold (10 ครั้ง) - ลด 7%</p>
+                  <p class="ml-4">• Platinum (20 ครั้ง) - ลด 10%</p>
+                </div>
+              </div>
+              
+              <button type="submit" id="add-member-submit-btn" class="w-full py-3 px-4 rounded-lg font-semibold transition-all" style="font-size: ${baseSize}px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white;">
+                สมัครสมาชิก
+              </button>
+            </form>
+          </div>
+
+          <!-- Member List -->
+          <div>
+            <h2 class="font-bold mb-4" style="font-size: ${baseSize * 1.3}px; color: ${config.text_color || defaultConfig.text_color};">รายชื่อสมาชิก (${allMembers.length})</h2>
+            <div id="member-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('member-card-type').addEventListener('change', (e) => {
+        const infoDiv = document.getElementById('card-type-info');
+        if (e.target.value === 'black') {
+          infoDiv.innerHTML = `
+            <p class="mb-1"><strong>Black Card:</strong></p>
+            <p class="ml-4">• Silver (เริ่มต้น) - ลด 10%</p>
+            <p class="ml-4">• Gold (10 ครั้ง) - ลด 12%</p>
+            <p class="ml-4">• Platinum (20 ครั้ง) - ลด 15%</p>
+          `;
+        } else {
+          infoDiv.innerHTML = `
+            <p class="mb-1"><strong>Member Card:</strong></p>
+            <p class="ml-4">• Silver (เริ่มต้น) - ลด 5%</p>
+            <p class="ml-4">• Gold (10 ครั้ง) - ลด 7%</p>
+            <p class="ml-4">• Platinum (20 ครั้ง) - ลด 10%</p>
+          `;
+        }
+      });
+
+      renderMemberList(config, baseSize);
+
+      document.getElementById('back-to-pos-from-member-btn').addEventListener('click', () => {
+        currentView = 'pos';
+        renderApp(config);
+      });
+
+      document.getElementById('add-member-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await addMember(config, baseSize);
+      });
+    }
+
+    function renderMemberList(config, baseSize) {
+      const memberList = document.getElementById('member-list');
+      
+      if (allMembers.length === 0) {
+        memberList.innerHTML = `
+          <p style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.5; text-align: center; padding: 40px;">
+            ยังไม่มีสมาชิก<br>สมัครสมาชิกคนแรกของคุณได้เลย!
+          </p>
+        `;
+        return;
+      }
+
+      memberList.innerHTML = '';
+      allMembers.forEach(member => {
+        const tier = getMemberTier(member.member_card_type, member.visit_count);
+        const discount = getMemberDiscount(member.member_card_type, tier);
+        const cardTypeName = member.member_card_type === 'member' ? 'Member Card' : 'Black Card';
         
-        <hr style="margin: 30px 0;">
-        <h2>รายการสินค้าปัจจุบัน</h2>
+        const memberCard = document.createElement('div');
+        memberCard.className = 'p-4 rounded-lg border-2';
+        memberCard.style.backgroundColor = config.surface_color || defaultConfig.surface_color;
+        memberCard.style.borderColor = getTierColor(tier);
+        
+        memberCard.innerHTML = `
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <h3 class="font-semibold mb-1" style="font-size: ${baseSize * 1.1}px; color: ${config.text_color || defaultConfig.text_color};">
+                ${member.member_name}
+              </h3>
+              <p style="font-size: ${baseSize * 0.85}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7;">
+                ${member.member_phone}
+              </p>
+            </div>
+            ${getTierBadge(tier)}
+          </div>
+          
+          <div class="mb-3 p-3 rounded-lg" style="background-color: ${config.background_color || defaultConfig.background_color};">
+            <p style="font-size: ${baseSize * 0.85}px; color: ${config.text_color || defaultConfig.text_color};">
+              <strong>${cardTypeName}</strong><br>
+              ระดับ: ${tier}<br>
+              มาทาน: ${member.visit_count} ครั้ง<br>
+              ส่วนลด: ${discount}%
+            </p>
+          </div>
+          
+          <button class="delete-member-btn w-full py-2 px-3 rounded-lg font-semibold transition-all" style="font-size: ${baseSize * 0.85}px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white;" data-member-id="${member.member_id}">
+            ลบสมาชิก
+          </button>
+        `;
+
+        const deleteBtn = memberCard.querySelector('.delete-member-btn');
+        deleteBtn.addEventListener('click', () => deleteMember(member, config, baseSize));
+        
+        memberList.appendChild(memberCard);
+      });
+    }
+
+    function renderManageView(config, baseSize) {
+      const app = document.getElementById('app');
+      
+      app.innerHTML = `
+        <div class="h-full overflow-auto p-6">
+          <header class="mb-6 flex justify-between items-center">
+            <h1 class="font-bold" style="font-size: ${baseSize * 2}px; color: ${config.text_color || defaultConfig.text_color};">
+              จัดการเมนูอาหาร
+            </h1>
+            <button id="back-to-pos-btn" class="px-4 py-2 rounded-lg font-semibold transition-all" style="font-size: ${baseSize * 0.9}px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white;">
+              ← กลับไปขาย
+            </button>
+          </header>
+
+          <!-- Add Menu Form -->
+          <div class="max-w-2xl mb-8 p-6 rounded-lg" style="background-color: ${config.surface_color || defaultConfig.surface_color};">
+            <h2 class="font-bold mb-4" style="font-size: ${baseSize * 1.3}px; color: ${config.text_color || defaultConfig.text_color};">เพิ่มเมนูใหม่</h2>
+            <form id="add-menu-form">
+              <div class="mb-4">
+                <label class="block mb-2 font-semibold" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">ชื่อเมนู</label>
+                <input type="text" id="menu-name" required class="w-full px-4 py-2 rounded-lg border" style="font-size: ${baseSize}px; border-color: rgba(0,0,0,0.2);">
+              </div>
+              
+              <div class="mb-4">
+                <label class="block mb-2 font-semibold" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">หมวดหมู่</label>
+                <input type="text" id="menu-category" required class="w-full px-4 py-2 rounded-lg border" style="font-size: ${baseSize}px; border-color: rgba(0,0,0,0.2);" placeholder="เช่น อาหารจานหลัก, เครื่องดื่ม">
+              </div>
+              
+              <div class="mb-4">
+                <label class="block mb-2 font-semibold" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">ราคา (บาท)</label>
+                <input type="number" id="menu-price" required min="0" step="1" class="w-full px-4 py-2 rounded-lg border" style="font-size: ${baseSize}px; border-color: rgba(0,0,0,0.2);">
+              </div>
+              
+              <div class="mb-4">
+                <label class="block mb-2 font-semibold" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">ลิงค์รูปภาพ (ถ้ามี)</label>
+                <input type="url" id="menu-image" class="w-full px-4 py-2 rounded-lg border" style="font-size: ${baseSize}px; border-color: rgba(0,0,0,0.2);" placeholder="https://example.com/image.jpg">
+                <p style="font-size: ${baseSize * 0.85}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.6; margin-top: 4px;">หากไม่ใส่ จะใช้ไอคอนเริ่มต้น</p>
+              </div>
+              
+              <button type="submit" id="add-menu-submit-btn" class="w-full py-3 px-4 rounded-lg font-semibold transition-all" style="font-size: ${baseSize}px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white;">
+                เพิ่มเมนู
+              </button>
+            </form>
+          </div>
+
+          <!-- Menu List -->
+          <div>
+            <h2 class="font-bold mb-4" style="font-size: ${baseSize * 1.3}px; color: ${config.text_color || defaultConfig.text_color};">รายการเมนูทั้งหมด (${allMenuItems.length})</h2>
+            <div id="menu-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+          </div>
         </div>
-</div>
-    
-    <script src="script.js"></script> 
-</body>
+      `;
+
+      renderMenuList(config, baseSize);
+
+      document.getElementById('back-to-pos-btn').addEventListener('click', () => {
+        currentView = 'pos';
+        renderApp(config);
+      });
+
+      document.getElementById('add-menu-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await addMenuItem(config, baseSize);
+      });
+    }
+
+    function renderMenuList(config, baseSize) {
+      const menuList = document.getElementById('menu-list');
+      
+      if (allMenuItems.length === 0) {
+        menuList.innerHTML = `
+          <p style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.5; text-align: center; padding: 40px;">
+            ยังไม่มีเมนูอาหาร<br>เพิ่มเมนูแรกของคุณได้เลย!
+          </p>
+        `;
+        return;
+      }
+
+      menuList.innerHTML = '';
+      allMenuItems.forEach(item => {
+        const itemCard = document.createElement('div');
+        itemCard.className = 'p-4 rounded-lg border';
+        itemCard.style.backgroundColor = config.surface_color || defaultConfig.surface_color;
+        itemCard.style.borderColor = 'rgba(0,0,0,0.1)';
+        
+        const imageContent = item.image_url 
+          ? `<img src="${item.image_url}" alt="${item.item_name}" class="w-full aspect-square object-cover rounded-lg mb-3" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+             <div class="w-full aspect-square mb-3 flex items-center justify-center p-4" style="display: none;">
+               ${getDefaultIcon(item.category)}
+             </div>`
+          : `<div class="w-full aspect-square mb-3 flex items-center justify-center p-4">
+               ${getDefaultIcon(item.category)}
+             </div>`;
+        
+        itemCard.innerHTML = `
+          ${imageContent}
+          <h3 class="font-semibold mb-1" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">${item.item_name}</h3>
+          <p style="font-size: ${baseSize * 0.85}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7;">${item.category}</p>
+          <p class="mb-3" style="font-size: ${baseSize}px; color: ${config.primary_action_color || defaultConfig.primary_action_color}; font-weight: 600;">฿${item.item_price}</p>
+          <button class="delete-menu-btn w-full py-2 px-3 rounded-lg font-semibold transition-all" style="font-size: ${baseSize * 0.85}px; background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white;" data-menu-id="${item.menu_id}">
+            ลบ
+          </button>
+        `;
+
+        const deleteBtn = itemCard.querySelector('.delete-menu-btn');
+        deleteBtn.addEventListener('click', () => deleteMenuItem(item, config, baseSize));
+        
+        menuList.appendChild(itemCard);
+      });
+    }
+
+    function updateCategoryButtons(config) {
+      document.querySelectorAll('.category-btn').forEach(btn => {
+        if (btn.dataset.category === selectedCategory) {
+          btn.style.backgroundColor = config.primary_action_color || defaultConfig.primary_action_color;
+          btn.style.color = 'white';
+        } else {
+          btn.style.backgroundColor = config.surface_color || defaultConfig.surface_color;
+          btn.style.color = config.text_color || defaultConfig.text_color;
+          btn.style.border = '1px solid rgba(0,0,0,0.1)';
+        }
+      });
+    }
+
+    function renderMenuItems(config, baseSize) {
+      const menuGrid = document.getElementById('menu-grid');
+      const filteredItems = selectedCategory === 'all' 
+        ? allMenuItems 
+        : allMenuItems.filter(item => item.category === selectedCategory);
+
+      if (filteredItems.length === 0) {
+        menuGrid.innerHTML = `
+          <div class="col-span-full text-center py-12">
+            <p style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.5;">
+              ไม่มีรายการในหมวดนี้
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      menuGrid.innerHTML = '';
+      filteredItems.forEach(item => {
+        const itemCard = document.createElement('div');
+        itemCard.className = 'rounded-lg p-4 cursor-pointer transition-all hover:shadow-lg';
+        itemCard.style.backgroundColor = config.surface_color || defaultConfig.surface_color;
+        
+        const imageContent = item.image_url 
+          ? `<img src="${item.image_url}" alt="${item.item_name}" class="w-full aspect-square object-cover rounded-lg mb-3" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+             <div class="w-full aspect-square mb-3 flex items-center justify-center p-4" style="display: none;">
+               ${getDefaultIcon(item.category)}
+             </div>`
+          : `<div class="w-full aspect-square mb-3 flex items-center justify-center p-4">
+               ${getDefaultIcon(item.category)}
+             </div>`;
+        
+        itemCard.innerHTML = `
+          ${imageContent}
+          <h4 class="font-semibold mb-1" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">${item.item_name}</h4>
+          <p class="mb-3" style="font-size: ${baseSize * 0.9}px; color: ${config.primary_action_color || defaultConfig.primary_action_color}; font-weight: 600;">฿${item.item_price}</p>
+          <button class="add-item-btn w-full py-2 px-3 rounded-lg font-semibold transition-all" style="font-size: ${baseSize * 0.85}px; background-color: ${config.primary_action_color || defaultConfig.primary_action_color}; color: white;" data-item-id="${item.menu_id}">
+            ${config.add_to_order_text || defaultConfig.add_to_order_text}
+          </button>
+        `;
+        
+        const addBtn = itemCard.querySelector('.add-item-btn');
+        addBtn.addEventListener('click', () => addToOrder(item, config, baseSize));
+        
+        menuGrid.appendChild(itemCard);
+      });
+    }
+
+    function updateOrderDisplay(config, baseSize) {
+      const orderItemsContainer = document.getElementById('order-items');
+      const totalAmountEl = document.getElementById('total-amount');
+      const discountSummaryEl = document.getElementById('discount-summary');
+      
+      if (currentOrders.length === 0) {
+        orderItemsContainer.innerHTML = `
+          <p style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.5; text-align: center; margin-top: 80px;">
+            ยังไม่มีรายการ
+          </p>
+        `;
+        totalAmountEl.textContent = '฿0';
+        discountSummaryEl.style.display = 'none';
+        return;
+      }
+
+      orderItemsContainer.innerHTML = '';
+      let subtotal = 0;
+
+      currentOrders.forEach((orderItem, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'flex justify-between items-center mb-4 pb-4 border-b';
+        itemDiv.style.borderColor = 'rgba(0,0,0,0.1)';
+        itemDiv.innerHTML = `
+          <div class="flex-1">
+            <h4 class="font-semibold" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">${orderItem.name}</h4>
+            <p style="font-size: ${baseSize * 0.85}px; color: ${config.text_color || defaultConfig.text_color}; opacity: 0.7;">฿${orderItem.price} x ${orderItem.quantity}</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="font-semibold" style="font-size: ${baseSize}px; color: ${config.text_color || defaultConfig.text_color};">฿${orderItem.price * orderItem.quantity}</span>
+            <button class="remove-item-btn w-8 h-8 rounded-full flex items-center justify-center transition-all" style="background-color: ${config.secondary_action_color || defaultConfig.secondary_action_color}; color: white; font-size: ${baseSize * 1.2}px;" data-index="${index}">×</button>
+          </div>
+        `;
+
+        const removeBtn = itemDiv.querySelector('.remove-item-btn');
+        removeBtn.addEventListener('click', () => removeFromOrder(index, config, baseSize));
+
+        orderItemsContainer.appendChild(itemDiv);
+        subtotal += orderItem.price * orderItem.quantity;
+      });
+
+      // Calculate discount
+      let totalDiscount = 0;
+      let discountText = '';
+      
+      if (selectedMember) {
+        const tier = getMemberTier(selectedMember.member_card_type, selectedMember.visit_count);
+        const memberDiscount = getMemberDiscount(selectedMember.member_card_type, tier);
+        totalDiscount += memberDiscount;
+        discountText += `สมาชิก ${tier}: ${memberDiscount}%`;
+      }
+      
+      if (checkInDiscount) {
+        totalDiscount += 5;
+        if (discountText) discountText += ' + ';
+        discountText += 'เช็คอิน: 5%';
+      }
+
+      const discountAmount = Math.floor(subtotal * totalDiscount / 100);
+      const finalTotal = subtotal - discountAmount;
+
+      if (totalDiscount > 0) {
+        discountSummaryEl.style.display = 'block';
+        discountSummaryEl.innerHTML = `
+          <div class="p-3 rounded-lg mb-2" style="background-color: ${config.background_color || defaultConfig.background_color};">
+            <div class="flex justify-between mb-1" style="font-size: ${baseSize * 0.85}px; color: ${config.text_color || defaultConfig.text_color};">
+              <span>ยอดรวมก่อนลด:</span>
+              <span>฿${subtotal}</span>
+            </div>
+            <div class="flex justify-between mb-1" style="font-size: ${baseSize * 0.85}px; color: ${config.primary_action_color || defaultConfig.primary_action_color};">
+              <span>${discountText}</span>
+              <span>-฿${discountAmount}</span>
+            </div>
+          </div>
+        `;
+      } else {
+        discountSummaryEl.style.display = 'none';
+      }
+
+      totalAmountEl.textContent = `฿${finalTotal}`;
+    }
+
+    function addToOrder(item, config, baseSize) {
+      const existingItem = currentOrders.find(orderItem => orderItem.id === item.menu_id);
+      if (existingItem) {
+        existingItem.quantity++;
+      } else {
+        currentOrders.push({
+          id: item.menu_id,
+          name: item.item_name,
+          price: item.item_price,
+          category: item.category,
+          quantity: 1
+        });
+      }
+      updateOrderDisplay(config, baseSize);
+    }
+
+    function removeFromOrder(index, config, baseSize) {
+      currentOrders.splice(index, 1);
+      updateOrderDisplay(config, baseSize);
+    }
+
+    async function checkout(config, baseSize) {
+      if (currentOrders.length === 0) {
+        showMessage('กรุณาเลือกรายการอาหารก่อนชำระเงิน', config, baseSize);
+        return;
+      }
+
+      const checkoutBtn = document.getElementById('checkout-btn');
+      checkoutBtn.disabled = true;
+      checkoutBtn.textContent = 'กำลังบันทึก...';
+      checkoutBtn.style.opacity = '0.6';
+
+      const orderId = `ORD-${Date.now()}`;
+      const timestamp = new Date().toISOString();
+      const tableNumber = document.getElementById('table-number').value.trim();
+
+      // Calculate discount
+      let totalDiscount = 0;
+      if (selectedMember) {
+        const tier = getMemberTier(selectedMember.member_card_type, selectedMember.visit_count);
+        totalDiscount += getMemberDiscount(selectedMember.member_card_type, tier);
+      }
+      if (checkInDiscount) {
+        totalDiscount += 5;
+      }
+
+      // Save orders
+      for (const item of currentOrders) {
+        const originalPrice = item.price * item.quantity;
+        const discountAmount = Math.floor(originalPrice * totalDiscount / 100);
+        const finalPrice = originalPrice - discountAmount;
+
+        const result = await window.dataSdk.create({
+          order_id: orderId,
+          order_item_name: item.name,
+          order_item_price: originalPrice,
+          order_discount_percent: totalDiscount,
+          order_final_price: finalPrice,
+          quantity: item.quantity,
+          order_category: item.category,
+          order_member_id: selectedMember ? selectedMember.member_id : '',
+          order_table_number: tableNumber,
+          order_timestamp: timestamp
+        });
+
+        if (result.isError) {
+          showMessage('เกิดข้อผิดพลาดในการบันทึกข้อมูล', config, baseSize);
+          checkoutBtn.disabled = false;
+          checkoutBtn.textContent = config.checkout_button_text || defaultConfig.checkout_button_text;
+          checkoutBtn.style.opacity = '1';
+          return;
+        }
+      }
+
+      // Update member visit count if member is selected
+      if (selectedMember) {
+        const updatedMember = { ...selectedMember };
+        updatedMember.visit_count = (updatedMember.visit_count || 0) + 1;
+        
+        const updateResult = await window.dataSdk.update(updatedMember);
+        if (updateResult.isError) {
+          showMessage('บันทึกออเดอร์สำเร็จ แต่ไม่สามารถอัพเดทข้อมูลสมาชิกได้', config, baseSize);
+        }
+      }
+
+      showMessage('บันทึกออเดอร์สำเร็จ!', config, baseSize);
+      currentOrders = [];
+      selectedMember = null;
+      checkInDiscount = false;
+      
+      if (document.getElementById('table-number')) {
+        document.getElementById('table-number').value = '';
+      }
+      if (document.getElementById('member-select')) {
+        document.getElementById('member-select').value = '';
+      }
+      if (document.getElementById('checkin-checkbox')) {
+        document.getElementById('checkin-checkbox').checked = false;
+      }
+      
+      updateMemberInfo(config, baseSize);
+      updateOrderDisplay(config, baseSize);
+      
+      checkoutBtn.disabled = false;
+      checkoutBtn.textContent = config.checkout_button_text || defaultConfig.checkout_button_text;
+      checkoutBtn.style.opacity = '1';
+    }
+
+    function clearOrder(config, baseSize) {
+      currentOrders = [];
+      updateOrderDisplay(config, baseSize);
+    }
+
+    async function addMenuItem(config, baseSize) {
+      const name = document.getElementById('menu-name').value.trim();
+      const category = document.getElementById('menu-category').value.trim();
+      const price = parseFloat(document.getElementById('menu-price').value);
+      const imageUrl = document.getElementById('menu-image').value.trim();
+
+      if (!name || !category || !price) {
+        showMessage('กรุณากรอกข้อมูลให้ครบถ้วน', config, baseSize);
+        return;
+      }
+
+      const submitBtn = document.getElementById('add-menu-submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'กำลังเพิ่ม...';
+      submitBtn.style.opacity = '0.6';
+
+      const menuId = `MENU-${Date.now()}`;
+      const result = await window.dataSdk.create({
+        menu_id: menuId,
+        item_name: name,
+        item_price: price,
+        category: category,
+        image_url: imageUrl || '',
+        created_at: new Date().toISOString()
+      });
+
+      if (result.isError) {
+        showMessage('เกิดข้อผิดพลาดในการเพิ่มเมนู', config, baseSize);
+      } else {
+        showMessage('เพิ่มเมนูสำเร็จ!', config, baseSize);
+        document.getElementById('add-menu-form').reset();
+      }
+
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'เพิ่มเมนู';
+      submitBtn.style.opacity = '1';
+    }
+
+    async function deleteMenuItem(item, config, baseSize) {
+      const result = await window.dataSdk.delete(item);
+      
+      if (result.isError) {
+        showMessage('เกิดข้อผิดพลาดในการลบเมนู', config, baseSize);
+      } else {
+        showMessage('ลบเมนูสำเร็จ!', config, baseSize);
+      }
+    }
+
+    async function addMember(config, baseSize) {
+      const name = document.getElementById('member-name').value.trim();
+      const phone = document.getElementById('member-phone').value.trim();
+      const cardType = document.getElementById('member-card-type').value;
+
+      if (!name || !phone) {
+        showMessage('กรุณากรอกข้อมูลให้ครบถ้วน', config, baseSize);
+        return;
+      }
+
+      const submitBtn = document.getElementById('add-member-submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'กำลังสมัคร...';
+      submitBtn.style.opacity = '0.6';
+
+      const memberId = `MEM-${Date.now()}`;
+      const result = await window.dataSdk.create({
+        member_id: memberId,
+        member_name: name,
+        member_phone: phone,
+        member_card_type: cardType,
+        member_tier: 'Silver',
+        visit_count: 0,
+        member_created_at: new Date().toISOString()
+      });
+
+      if (result.isError) {
+        showMessage('เกิดข้อผิดพลาดในการสมัครสมาชิก', config, baseSize);
+      } else {
+        showMessage('สมัครสมาชิกสำเร็จ!', config, baseSize);
+        document.getElementById('add-member-form').reset();
+      }
+
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'สมัครสมาชิก';
+      submitBtn.style.opacity = '1';
+    }
+
+    async function deleteMember(member, config, baseSize) {
+      const result = await window.dataSdk.delete(member);
+      
+      if (result.isError) {
+        showMessage('เกิดข้อผิดพลาดในการลบสมาชิก', config, baseSize);
+      } else {
+        showMessage('ลบสมาชิกสำเร็จ!', config, baseSize);
+      }
+    }
+
+    function showMessage(message, config, baseSize) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'fixed top-6 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity';
+      messageDiv.style.backgroundColor = config.primary_action_color || defaultConfig.primary_action_color;
+      messageDiv.style.color = 'white';
+      messageDiv.style.fontSize = `${baseSize}px`;
+      messageDiv.textContent = message;
+      
+      document.body.appendChild(messageDiv);
+      
+      setTimeout(() => {
+        messageDiv.style.opacity = '0';
+        setTimeout(() => messageDiv.remove(), 300);
+      }, 2500);
+    }
+
+    const dataHandler = {
+      onDataChanged(data) {
+        const menuItems = data.filter(item => item.menu_id);
+        allMenuItems = menuItems;
+
+        const members = data.filter(item => item.member_id);
+        allMembers = members;
+
+        const config = window.elementSdk ? window.elementSdk.config : defaultConfig;
+        const baseSize = config.font_size || defaultConfig.font_size;
+
+        if (currentView === 'manage') {
+          renderMenuList(config, baseSize);
+        } else if (currentView === 'member') {
+          renderMemberList(config, baseSize);
+        } else if (currentView === 'pos') {
+          const categoryButtonsContainer = document.getElementById('category-buttons');
+          if (categoryButtonsContainer) {
+            const categories = [...new Set(allMenuItems.map(item => item.category))];
+            categoryButtonsContainer.innerHTML = `
+              <button class="category-btn px-4 py-2 rounded-lg font-semibold transition-all" data-category="all" style="font-size: ${baseSize * 0.9}px;">
+                ทั้งหมด
+              </button>
+            `;
+            categories.forEach(category => {
+              const btn = document.createElement('button');
+              btn.className = 'category-btn px-4 py-2 rounded-lg font-semibold transition-all';
+              btn.dataset.category = category;
+              btn.style.fontSize = `${baseSize * 0.9}px`;
+              btn.textContent = category;
+              btn.addEventListener('click', (e) => {
+                selectedCategory = e.target.dataset.category;
+                updateCategoryButtons(config);
+                renderMenuItems(config, baseSize);
+              });
+              categoryButtonsContainer.appendChild(btn);
+            });
+            updateCategoryButtons(config);
+            renderMenuItems(config, baseSize);
+          }
+
+          // Update member select dropdown
+          const memberSelect = document.getElementById('member-select');
+          if (memberSelect) {
+            const currentValue = memberSelect.value;
+            memberSelect.innerHTML = '<option value="">-- ไม่ใช้สมาชิก --</option>';
+            allMembers.forEach(member => {
+              const option = document.createElement('option');
+              option.value = member.member_id;
+              option.textContent = `${member.member_name} (${member.member_phone})`;
+              memberSelect.appendChild(option);
+            });
+            memberSelect.value = currentValue;
+            
+            // Update selected member object with latest data
+            if (selectedMember) {
+              selectedMember = allMembers.find(m => m.member_id === selectedMember.member_id);
+              updateMemberInfo(config, baseSize);
+            }
+          }
+        }
+      }
+    };
+
+    async function init() {
+      if (window.dataSdk) {
+        const initResult = await window.dataSdk.init(dataHandler);
+        if (!initResult.isOk) {
+          console.error("Failed to initialize data SDK");
+        }
+      }
+
+      if (window.elementSdk) {
+        window.elementSdk.init({
+          defaultConfig: defaultConfig,
+          onConfigChange: async (config) => {
+            await renderApp(config);
+          },
+          mapToCapabilities: (config) => ({
+            recolorables: [
+              {
+                get: () => config.background_color || defaultConfig.background_color,
+                set: (value) => {
+                  config.background_color = value;
+                  window.elementSdk.setConfig({ background_color: value });
+                }
+              },
+              {
+                get: () => config.surface_color || defaultConfig.surface_color,
+                set: (value) => {
+                  config.surface_color = value;
+                  window.elementSdk.setConfig({ surface_color: value });
+                }
+              },
+              {
+                get: () => config.text_color || defaultConfig.text_color,
+                set: (value) => {
+                  config.text_color = value;
+                  window.elementSdk.setConfig({ text_color: value });
+                }
+              },
+              {
+                get: () => config.primary_action_color || defaultConfig.primary_action_color,
+                set: (value) => {
+                  config.primary_action_color = value;
+                  window.elementSdk.setConfig({ primary_action_color: value });
+                }
+              },
+              {
+                get: () => config.secondary_action_color || defaultConfig.secondary_action_color,
+                set: (value) => {
+                  config.secondary_action_color = value;
+                  window.elementSdk.setConfig({ secondary_action_color: value });
+                }
+              }
+            ],
+            borderables: [],
+            fontEditable: {
+              get: () => config.font_family || defaultConfig.font_family,
+              set: (value) => {
+                config.font_family = value;
+                window.elementSdk.setConfig({ font_family: value });
+              }
+            },
+            fontSizeable: {
+              get: () => config.font_size || defaultConfig.font_size,
+              set: (value) => {
+                config.font_size = value;
+                window.elementSdk.setConfig({ font_size: value });
+              }
+            }
+          }),
+          mapToEditPanelValues: (config) => new Map([
+            ["restaurant_name", config.restaurant_name || defaultConfig.restaurant_name],
+            ["add_to_order_text", config.add_to_order_text || defaultConfig.add_to_order_text],
+            ["checkout_button_text", config.checkout_button_text || defaultConfig.checkout_button_text],
+            ["clear_button_text", config.clear_button_text || defaultConfig.clear_button_text]
+          ])
+        });
+
+        await renderApp(window.elementSdk.config);
+      } else {
+        await renderApp(defaultConfig);
+      }
+    }
+
+    init();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9ae30c9763174ba0',t:'MTc2NTc3MTM4Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
